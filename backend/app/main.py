@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import List
+from typing import List, Optional
 from app.database import get_db, engine
 from app import models, schemas
 from app.sku import generar_sku
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Helper: contador de productos por categoría ───────────────────────────
+# ── Helper: contador de productos por categoría ──────────────────────────
 async def _contador_categoria(db: AsyncSession, categoria: str) -> int:
     result = await db.execute(
         select(models.Producto).where(models.Producto.categoria == categoria)
@@ -29,17 +29,20 @@ async def _contador_categoria(db: AsyncSession, categoria: str) -> int:
     return len(result.scalars().all()) + 1
 
 
-# ── PRODUCTOS ────────────────────────────────────────────────────────────
+# ── PRODUCTOS ───────────────────────────────────────────────────────────
 @app.get("/productos", response_model=List[schemas.ProductoOut])
-async def listar_productos(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Producto).order_by(models.Producto.nombre))
+async def listar_productos(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=1000, ge=1, le=5000),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(models.Producto).order_by(models.Producto.nombre).offset(skip).limit(limit)
+    result = await db.execute(stmt)
     return result.scalars().all()
 
 @app.post("/productos", response_model=schemas.ProductoOut, status_code=201)
 async def crear_producto(data: schemas.ProductoCreate, db: AsyncSession = Depends(get_db)):
     datos = data.model_dump()
-
-    # Generar SKU automático si no se proporcionó
     if not datos.get("sku", "").strip():
         contador = await _contador_categoria(db, datos["categoria"])
         datos["sku"] = generar_sku(
@@ -48,7 +51,6 @@ async def crear_producto(data: schemas.ProductoCreate, db: AsyncSession = Depend
             variantes=datos.get("variantes", []),
             contador=contador,
         )
-
     p = models.Producto(**datos)
     db.add(p)
     await db.flush()
@@ -76,7 +78,6 @@ async def actualizar_producto(id: int, data: schemas.ProductoUpdate, db: AsyncSe
     if not p:
         raise HTTPException(404, "Producto no encontrado")
     datos = data.model_dump()
-    # Si se borra el SKU al editar, regenerarlo
     if not datos.get("sku", "").strip():
         contador = await _contador_categoria(db, datos["categoria"])
         datos["sku"] = generar_sku(
@@ -115,7 +116,7 @@ async def cambiar_qty(id: int, delta: int, db: AsyncSession = Depends(get_db)):
     await db.refresh(p)
     return p
 
-# ── VENTAS ────────────────────────────────────────────────────────────────
+# ── VENTAS ──────────────────────────────────────────────────────────────
 @app.post("/ventas", response_model=schemas.MovimientoOut, status_code=201)
 async def registrar_venta(data: schemas.VentaRequest, db: AsyncSession = Depends(get_db)):
     p = await db.get(models.Producto, data.producto_id)
@@ -134,7 +135,7 @@ async def registrar_venta(data: schemas.VentaRequest, db: AsyncSession = Depends
     await db.refresh(mov)
     return mov
 
-# ── AJUSTES ─────────────────────────────────────────────────────────────
+# ── AJUSTES ───────────────────────────────────────────────────────────
 @app.post("/productos/{id}/ajuste", response_model=schemas.MovimientoOut)
 async def ajustar_inventario(id: int, data: schemas.AjusteRequest, db: AsyncSession = Depends(get_db)):
     p = await db.get(models.Producto, id)
@@ -152,17 +153,22 @@ async def ajustar_inventario(id: int, data: schemas.AjusteRequest, db: AsyncSess
     await db.refresh(mov)
     return mov
 
-# ── HISTORIAL ──────────────────────────────────────────────────────────
+# ── HISTORIAL ─────────────────────────────────────────────────────────
 @app.get("/movimientos", response_model=List[schemas.MovimientoOut])
-async def listar_movimientos(tipo: str = None, db: AsyncSession = Depends(get_db)):
+async def listar_movimientos(
+    tipo: Optional[str] = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=500, ge=1, le=2000),
+    db: AsyncSession = Depends(get_db)
+):
     stmt = select(models.Movimiento).order_by(models.Movimiento.fecha.desc())
     if tipo:
         stmt = stmt.where(models.Movimiento.tipo == tipo)
-    stmt = stmt.limit(500)
+    stmt = stmt.offset(skip).limit(limit)
     result = await db.execute(stmt)
     return result.scalars().all()
 
-# ── REPORTE ─────────────────────────────────────────────────────────────
+# ── REPORTE ───────────────────────────────────────────────────────────
 @app.get("/reporte")
 async def reporte(db: AsyncSession = Depends(get_db)):
     ventas_result = await db.execute(
@@ -195,7 +201,7 @@ async def reporte(db: AsyncSession = Depends(get_db)):
         "top_productos": [{"nombre": k, **v} for k, v in top_sorted],
     }
 
-# ── UTILIDADES ──────────────────────────────────────────────────────────
+# ── UTILIDADES ───────────────────────────────────────────────────────
 @app.get("/sku/preview")
 async def preview_sku(
     categoria: str,
@@ -203,7 +209,6 @@ async def preview_sku(
     variantes: str = "",
     db: AsyncSession = Depends(get_db),
 ):
-    """Devuelve una vista previa del SKU que se generaría sin crear el producto."""
     lista_variantes = [v.strip() for v in variantes.split(",") if v.strip()]
     contador = await _contador_categoria(db, categoria)
     sku = generar_sku(
