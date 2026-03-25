@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventario Pro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>📦 Inventario Pro</h1>
+      <span class="api-url" id="api-status">🟢 API conectada</span>
+    </header>
+    <nav>
+      <button class="active" onclick="showPage('inventario', this)">
+        📋 Inventario
+      </button>
+      <button onclick="showPage('ventas', this)">💰 Registrar Venta</button>
+      <button onclick="showPage('historial', this)">🕘 Historial</button>
+      <button onclick="showPage('reporte', this)">📊 Reporte</button>
+    </nav>
+
+    <!-- INVENTARIO -->
+    <div class="page active" id="page-inventario">
+      <div class="stats">
+        <div class="stat-card">
+          <div class="label">Productos</div>
+          <div class="value" id="s-total">—</div>
+        </div>
+        <div class="stat-card green">
+          <div class="label">En Stock</div>
+          <div class="value" id="s-stock">—</div>
+        </div>
+        <div class="stat-card warn">
+          <div class="label">Stock Bajo ⚠️</div>
+          <div class="value" id="s-low">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Valor Inventario</div>
+          <div class="value" id="s-valor">—</div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input
+          type="text"
+          id="search"
+          placeholder="🔍 Buscar producto o SKU..."
+          aria-label="Buscar producto o SKU"
+          title="Buscar producto o SKU"
+          oninput="renderInventario()"
+        />
+        <select id="filter-cat" aria-label="Filtrar por categoría" title="Filtrar por categoría" onchange="renderInventario()">
+          <option value="">Todas las categorías</option>
+          <option>Playeras</option>
+          <option>Hoodies</option>
+          <option>MDF Láser</option>
+          <option>3D Print</option>
+          <option>Otro</option>
+        </select>
+        <select id="filter-status" aria-label="Filtrar por estado" title="Filtrar por estado" onchange="renderInventario()">
+          <option value="">Todos</option>
+          <option value="ok">En stock</option>
+          <option value="low">Stock bajo</option>
+          <option value="out">Sin stock</option>
+        </select>
+        <button class="btn btn-outline" onclick="openModal('importar')">
+          ⬆ Importar CSV
+        </button>
+        <button class="btn btn-primary" onclick="openModal('producto')">
+          + Producto
+        </button>
+        <button class="btn btn-success" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+      <table id="inv-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Categoría</th>
+            <th>Variantes</th>
+            <th>Cantidad</th>
+            <th>Costo</th>
+            <th>Venta</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="inv-body"></tbody>
+      </table>
+      <div class="empty-state" id="inv-empty">
+        <div class="icon">📭</div>
+        <div>Sin productos. ¡Agrega el primero!</div>
+      </div>
+    </div>
+
+    <!-- VENTAS -->
+    <div class="page" id="page-ventas">
+      <div class="stats">
+        <div class="stat-card green">
+          <div class="label">Ventas Hoy</div>
+          <div class="value" id="v-hoy">—</div>
+        </div>
+        <div class="stat-card green">
+          <div class="label">Ingresos Hoy</div>
+          <div class="value" id="v-ing-hoy">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Ventas Mes</div>
+          <div class="value" id="v-mes">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Ingresos Mes</div>
+          <div class="value" id="v-ing-mes">—</div>
+        </div>
+      </div>
+      <div class="pos-grid">
+        <div class="sales-card card-flush">
+          <h3 class="section-title">
+            Buscador de Productos
+          </h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="v-scan-sku">Código SKU (Escáner)</label>
+              <input type="text" id="v-scan-sku" aria-label="Escanear SKU" title="Escanear SKU" placeholder="Ej: PLAYERA-S" oninput="if(window.onBuscarSKU) onBuscarSKU(this.value)" />
+            </div>
+            <div class="form-group">
+              <label for="v-filtro-cat">Filtrar por Categoría / Nombre</label>
+              <input type="text" id="v-filtro-cat" aria-label="Filtrar Categoría" title="Filtrar Categoría" placeholder="Ej: Playera › Dama" oninput="if(window.onFiltrarCategoria) onFiltrarCategoria()" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="v-producto">Producto Seleccionado *</label>
+            <select id="v-producto" aria-label="Seleccionar producto" title="Seleccionar producto" onchange="onProductoVenta()">
+              <option value="">-- Selecciona --</option>
+            </select>
+          </div>
+          <div class="form-group d-none" id="v-variante-group">
+            <label for="v-variante">Variante (Op)</label>
+            <select id="v-variante" aria-label="Seleccionar variante" title="Seleccionar variante"></select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="v-qty">Cantidad *</label>
+              <input type="number" id="v-qty" min="1" value="1" aria-label="Cantidad" title="Cantidad" />
+            </div>
+            <div class="form-group">
+              <label for="v-precio">Precio venta ($MXN)</label>
+              <input type="number" id="v-precio" min="0" step="0.01" value="0" aria-label="Precio venta" title="Precio venta" />
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="agregarAlCarrito()">➕ Agregar al Carrito</button>
+        </div>
+
+        <div class="sales-card card-flush card-cart">
+          <h3 class="section-title">🛒 Carrito de Compras</h3>
+          <div id="cart-list" class="cart-area">
+             <div class="cart-empty">Carrito vacío</div>
+          </div>
+          <div class="cart-tot-row">
+             <span>Total:</span>
+             <span id="cart-total">$0.00</span>
+          </div>
+          <div class="form-group">
+            <label for="v-canal">Canal de venta</label>
+            <select id="v-canal" aria-label="Canal de venta" title="Canal de venta">
+              <option>Venta directa</option>
+              <option>Amazon MX</option>
+              <option>Amazon USA</option>
+              <option>Amazon CA</option>
+              <option>Mercado Libre</option>
+              <option>Otro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="v-notas">Notas / Folio General</label>
+            <input type="text" id="v-notas" placeholder="Ej: Pedido #123" aria-label="Notas" title="Notas" />
+          </div>
+          <button class="btn btn-success btn-block btn-checkout" onclick="procesarCobro()">
+            💵 Cobrar e Imprimir Ticket
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <div class="page" id="page-historial">
+      <div class="toolbar">
+        <input
+          type="text"
+          id="h-search"
+          placeholder="🔍 Buscar..."
+          aria-label="Buscar en historial"
+          title="Buscar en historial"
+          oninput="renderHistorial()"
+        />
+        <select id="h-tipo" aria-label="Filtrar por tipo" title="Filtrar por tipo" onchange="renderHistorial()">
+          <option value="">Todos</option>
+          <option value="venta">Ventas</option>
+          <option value="entrada">Entradas</option>
+          <option value="ajuste">Ajustes</option>
+        </select>
+      </div>
+      <div id="hist-list"></div>
+      <div class="empty-state" id="hist-empty">
+        <div class="icon">📜</div>
+        <div>Sin movimientos aún</div>
+      </div>
+    </div>
+
+    <!-- REPORTE -->
+    <div class="page" id="page-reporte">
+      <div class="stats">
+        <div class="stat-card green">
+          <div class="label">Total Ingresos</div>
+          <div class="value" id="r-ingresos">—</div>
+        </div>
+        <div class="stat-card red">
+          <div class="label">Costo Vendido</div>
+          <div class="value" id="r-costo">—</div>
+        </div>
+        <div class="stat-card green">
+          <div class="label">Ganancia</div>
+          <div class="value" id="r-ganancia">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unidades Vendidas</div>
+          <div class="value" id="r-unidades">—</div>
+        </div>
+      </div>
+      <h3 class="section-title">
+        Productos más vendidos
+      </h3>
+      <table id="r-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Unidades</th>
+            <th>Ingresos</th>
+            <th>Ganancia</th>
+          </tr>
+        </thead>
+        <tbody id="r-body"></tbody>
+      </table>
+      <div class="empty-state" id="r-empty">
+        <div class="icon">📊</div>
+        <div>Sin ventas aún</div>
+      </div>
+    </div>
+
+    <!-- MODALES -->
+    <div class="overlay" id="overlay-producto">
+      <div class="modal">
+        <h2 id="mp-title">Agregar Producto</h2>
+        <div class="form-group">
+          <label for="mp-nombre">Nombre *</label
+          ><input type="text" id="mp-nombre" placeholder="Ej: Playera básica" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="mp-cat">Categoría</label>
+            <input type="text" id="mp-cat" list="cat-list" placeholder="Ej: Playera › Adulto..." oninput="verificarAsistenteRopa()" />
+            <datalist id="cat-list">
+              <option value="Playera"></option>
+              <option value="Sudadera"></option>
+              <option value="MDF Láser"></option>
+              <option value="3D Print"></option>
+              <option value="Otro"></option>
+            </datalist>
+          </div>
+          <div class="form-group">
+            <label for="mp-sku">SKU</label><input type="text" id="mp-sku" />
+          </div>
+        </div>
+
+        <div id="mp-ropa-fields" class="wizard-box">
+          <h4 class="wizard-title">👕 Asistente de Configuración de Ropa</h4>
+          <div class="form-row">
+            <div class="form-group" id="group-publico">
+              <label>Público</label>
+              <select id="mp-publico" title="Público" aria-label="Público" onchange="updateRopaForms()">
+                <option value="Adulto">Adulto</option>
+                <option value="Juvenil">Juvenil</option>
+                <option value="Niño">Niño</option>
+                <option value="Bebé">Bebé</option>
+              </select>
+            </div>
+            <div class="form-group" id="group-genero">
+              <label>Género</label>
+              <select id="mp-genero" title="Género" aria-label="Género" onchange="updateRopaForms()">
+                <option value="Caballero">Caballero</option>
+                <option value="Dama">Dama</option>
+                <option value="Unisex">Unisex</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" id="group-manga">
+              <label>Manga</label>
+              <select id="mp-manga" title="Manga" aria-label="Manga" onchange="updateRopaForms()">
+                <option value="Manga Corta">Manga Corta</option>
+                <option value="Manga Larga">Manga Larga</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Color (Opcional)</label>
+              <input type="text" id="mp-color" placeholder="Ej: Azul Marino" onblur="updateRopaForms()" />
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline btn-block btn-wizard" onclick="aplicarRopa(event)">
+             ✨ Aplicar Categoría y Tallas Automáticas
+          </button>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="mp-qty">Cantidad inicial</label
+            ><input type="number" id="mp-qty" min="0" value="0" />
+          </div>
+          <div class="form-group">
+            <label for="mp-min">Stock mínimo</label
+            ><input type="number" id="mp-min" min="0" value="5" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="mp-costo">Precio costo ($MXN)</label
+            ><input type="number" id="mp-costo" min="0" step="0.01" value="0" />
+          </div>
+          <div class="form-group">
+            <label for="mp-venta">Precio venta ($MXN)</label
+            ><input type="number" id="mp-venta" min="0" step="0.01" value="0" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Variantes (talla, color, modelo...)</label>
+          <div class="variants-list" id="variants-list"></div>
+          <button class="add-variant-btn" onclick="addVariantField()">
+            + Agregar variante
+          </button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeModal('producto')">
+            Cancelar
+          </button>
+          <button class="btn btn-primary" onclick="saveProducto()">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="overlay-ajuste">
+      <div class="modal">
+        <h2>Ajuste de Inventario</h2>
+        <div class="form-group">
+          <label for="aj-nombre">Producto</label
+          ><input
+            type="text"
+            id="aj-nombre"
+            readonly
+          />
+        </div>
+        <div class="form-group">
+          <label for="aj-actual">Cantidad actual</label
+          ><input
+            type="number"
+            id="aj-actual"
+            readonly
+          />
+        </div>
+        <div class="form-group">
+          <label for="aj-nueva">Nueva cantidad *</label
+          ><input type="number" id="aj-nueva" min="0" />
+        </div>
+        <div class="form-group">
+          <label for="aj-motivo">Motivo</label>
+          <select id="aj-motivo">
+            <option>Entrada de mercancía</option>
+            <option>Corrección de inventario</option>
+            <option>Pérdida / daño</option>
+            <option>Devolución</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="aj-notas">Notas</label><input type="text" id="aj-notas" />
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeModal('ajuste')">
+            Cancelar
+          </button>
+          <button class="btn btn-primary" onclick="saveAjuste()">
+            Aplicar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="overlay-importar">
+      <div class="modal">
+        <h2>Importar Inventario (CSV)</h2>
+        <p class="import-instructions">
+          Descarga la plantilla. Para productos generales usa el campo "Variantes" separando con <code>|</code>. Si es ropa, llena las categorías (Público, Género, etc) y deja "Variantes" vacío para que autogenere las tallas.
+        </p>
+        <button class="btn btn-outline btn-block mb-20" onclick="descargarPlantillaCSV()">
+          📥 Descargar Plantilla CSV
+        </button>
+        <div class="form-group">
+          <label for="csv-file">Subir Archivo Rellenado</label>
+          <input type="file" id="csv-file" accept=".csv" aria-label="Archivo CSV para importar" title="Subir Archivo CSV" />
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeModal('importar')">
+            Cancelar
+          </button>
+          <button class="btn btn-primary" onclick="procesarImportacionCSV()">
+            Procesar CSV
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
