@@ -1,105 +1,133 @@
 """
-Generador automático de SKU para el inventario.
+Generador automático de SKU.
 
-Formatos por categoría:
-  Playeras  → P-{SEGMENTO}-300-{TALLA}    ej: P-DAMA-300-M
-  Hoodies   → H-{SEGMENTO}-300-{TALLA}    ej: H-CABALLERO-300-XL
-  MDF Láser → MDF-{NNN}                   ej: MDF-001
-  3D Print  → 3D-{NNN}                    ej: 3D-001
-  Otro      → PRD-{NNN}                   ej: PRD-001
+Formato Playeras:
+  Adulto Caballero : PA-CABALLERO-{COLOR}-C300-{TALLA}   ej: PA-CABALLERO-JADE-C300-S
+  Adulto Dama      : PA-DAMA-{COLOR}-D300-{TALLA}        ej: PA-DAMA-JADE-D300-M
+  Joven            : PJ-UNISEX-{COLOR}-J300-{TALLA}      ej: PJ-UNISEX-JADE-J300-XL
+  Niño             : PN-UNISEX-{COLOR}-N300-{TALLA}      ej: PN-UNISEX-JADE-N300-L
+  Bebé             : PB-UNISEX-{COLOR}-B300-{TALLA}      ej: PB-UNISEX-JADE-B300-M
 
-Segmentos válidos (se detectan desde el nombre del producto):
-  DAMA, CABALLERO, JOVEN, NINO, BEBE
-
-Tallas válidas (se detectan desde las variantes):
-  Ropa : XS, S, M, L, XL, XXL, XXXL
-  Bebé : 0-3M, 3-6M, 6-9M, 9-12M, 12-18M, 18-24M
-  Niño : 2, 4, 6, 8, 10, 12, 14, 16
+Otras categorías:
+  MDF Láser : MDF-{NNN}    ej: MDF-001
+  3D Print  : 3D-{NNN}     ej: 3D-001
+  Otro      : PRD-{NNN}    ej: PRD-001
 """
 
 import re
 
-# ── Mapeo de palabras clave → segmento ──────────────────────────────────────
+# ── Segmentos ───────────────────────────────────────────────────
+# Cada entrada: keyword -> (prefijo_seg, etiqueta, codigo_300)
 _SEGMENTOS = {
-    "dama":      "DAMA",
-    "mujer":     "DAMA",
-    "femenil":   "DAMA",
-    "caballero": "CABALLERO",
-    "hombre":    "CABALLERO",
-    "varonil":   "CABALLERO",
-    "masculino": "CABALLERO",
-    "joven":     "JOVEN",
-    "juvenil":   "JOVEN",
-    "teen":      "JOVEN",
-    "niño":      "NINO",
-    "nino":      "NINO",
-    "infantil":  "NINO",
-    "kids":      "NINO",
-    "bebe":      "BEBE",
-    "bebé":      "BEBE",
-    "baby":      "BEBE",
+    # Adulto Caballero
+    "caballero":  ("A", "CABALLERO", "C300"),
+    "hombre":     ("A", "CABALLERO", "C300"),
+    "varonil":    ("A", "CABALLERO", "C300"),
+    "masculino":  ("A", "CABALLERO", "C300"),
+    # Adulto Dama
+    "dama":       ("A", "DAMA",      "D300"),
+    "mujer":      ("A", "DAMA",      "D300"),
+    "femenil":    ("A", "DAMA",      "D300"),
+    "femenino":   ("A", "DAMA",      "D300"),
+    # Joven
+    "joven":      ("J", "UNISEX",    "J300"),
+    "juvenil":    ("J", "UNISEX",    "J300"),
+    "teen":       ("J", "UNISEX",    "J300"),
+    # Niño
+    "niño":       ("N", "UNISEX",    "N300"),
+    "nino":       ("N", "UNISEX",    "N300"),
+    "infantil":   ("N", "UNISEX",    "N300"),
+    "kids":       ("N", "UNISEX",    "N300"),
+    # Bebé
+    "bebe":       ("B", "UNISEX",    "B300"),
+    "bebé":       ("B", "UNISEX",    "B300"),
+    "baby":       ("B", "UNISEX",    "B300"),
 }
 
-# Tallas estándar en orden para detectar la primera disponible
-_TALLAS_ROPA  = ["XXXL", "XXL", "XL", "XS", "S", "M", "L"]
-_TALLAS_BEBE  = ["0-3M", "3-6M", "6-9M", "9-12M", "12-18M", "18-24M"]
-_TALLAS_NINO  = ["16", "14", "12", "10", "8", "6", "4", "2"]
-_TODAS_TALLAS = _TALLAS_ROPA + _TALLAS_BEBE + _TALLAS_NINO
+# Tallas en orden de mayor a menor para detectar la más larga primero
+_TALLAS = ["XXXL", "XXL", "XL", "XS",
+           "18-24M", "12-18M", "9-12M", "6-9M", "3-6M", "0-3M",
+           "16", "14", "12", "10", "8", "6", "4", "2",
+           "S", "M", "L"]
 
-# Prefijos por categoría para SKUs secuenciales
+# Prefijos para categorías sin segmento
 _PREFIJOS = {
     "MDF Láser": "MDF",
     "3D Print":  "3D",
     "Otro":      "PRD",
+    "Hoodies":   "H",   # se ampliará con el mismo esquema que Playeras en el futuro
 }
 
 
-def _detectar_segmento(nombre: str) -> str:
-    """Detecta el segmento a partir del nombre del producto."""
-    nombre_lower = nombre.lower()
-    for keyword, segmento in _SEGMENTOS.items():
-        if keyword in nombre_lower:
-            return segmento
-    return "UNISEX"
+def _detectar_segmento(nombre: str):
+    """Retorna (prefijo_seg, etiqueta, codigo_300) según keywords en el nombre."""
+    texto = nombre.lower()
+    for keyword, datos in _SEGMENTOS.items():
+        if keyword in texto:
+            return datos
+    # Default: Adulto Caballero
+    return ("A", "CABALLERO", "C300")
 
 
-def _detectar_talla(variantes: list[str]) -> str:
+def _detectar_color(nombre: str) -> str:
+    """
+    Extrae el color del nombre del producto.
+    Estrategia: toma la última palabra en mayúsculas o la última palabra
+    que no sea una talla ni palabra reservada.
+    """
+    palabras_reservadas = {
+        "playera", "playeras", "hoodie", "hoodies", "sudadera", "sudaderas",
+        "adulto", "adultos", "caballero", "dama", "joven", "jovenes",
+        "niño", "nino", "bebe", "bebé", "baby", "manga", "corta", "larga",
+        "cuello", "redondo", "v", "premium", "básica", "basica",
+        "hombre", "mujer", "unisex", "kids", "teen",
+    }
+    tallas_lower = {t.lower() for t in _TALLAS}
+
+    palabras = nombre.split()
+    for palabra in reversed(palabras):
+        limpia = re.sub(r"[^a-zá-úüñA-ZÁ-ÚÜÑ]", "", palabra).lower()
+        if limpia and limpia not in palabras_reservadas and limpia not in tallas_lower:
+            return limpia.upper()
+    return "COLOR"
+
+
+def _detectar_talla(variantes: list) -> str:
     """Extrae la primera talla reconocida de la lista de variantes."""
     texto = " ".join(variantes).upper()
-    for talla in _TODAS_TALLAS:
-        # Busca la talla como palabra completa (evita que 'S' coincida en 'XS')
+    for talla in _TALLAS:
         if re.search(rf"(?<![A-Z0-9]){re.escape(talla)}(?![A-Z0-9])", texto):
             return talla
-    return "UT"   # "UT" = Talla única / sin detectar
+    return "UT"  # Talla única / no detectada
 
 
 def generar_sku(
     categoria: str,
     nombre: str,
-    variantes: list[str],
+    variantes: list,
     contador: int = 1,
 ) -> str:
     """
-    Genera el SKU automático según la categoría.
+    Genera el SKU automático según categoría.
 
-    Args:
-        categoria: Categoría del producto (Playeras, Hoodies, MDF Láser, 3D Print, Otro).
-        nombre:    Nombre del producto (se usa para detectar segmento).
-        variantes: Lista de variantes (se usa para detectar talla).
-        contador:  Número secuencial para categorías sin segmento/talla.
+    Playeras:
+      PA-CABALLERO-{COLOR}-C300-{TALLA}
+      PA-DAMA-{COLOR}-D300-{TALLA}
+      PJ-UNISEX-{COLOR}-J300-{TALLA}
+      PN-UNISEX-{COLOR}-N300-{TALLA}
+      PB-UNISEX-{COLOR}-B300-{TALLA}
 
-    Returns:
-        SKU generado como string.
+    Otras categorías:
+      MDF-{NNN} | 3D-{NNN} | PRD-{NNN}
     """
-    if categoria in ("Playeras", "Hoodies"):
-        prefijo   = "P" if categoria == "Playeras" else "H"
-        segmento  = _detectar_segmento(nombre)
-        talla     = _detectar_talla(variantes)
-        return f"{prefijo}-{segmento}-300-{talla}"
+    if categoria == "Playeras":
+        prefijo_seg, etiqueta, codigo = _detectar_segmento(nombre)
+        color = _detectar_color(nombre)
+        talla = _detectar_talla(variantes)
+        return f"P{prefijo_seg}-{etiqueta}-{color}-{codigo}-{talla}"
 
     if categoria in _PREFIJOS:
         prefijo = _PREFIJOS[categoria]
         return f"{prefijo}-{contador:03d}"
 
-    # Fallback genérico
     return f"PRD-{contador:03d}"
