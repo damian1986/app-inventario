@@ -32,11 +32,11 @@ async def _contador_categoria(db: AsyncSession, categoria: str) -> int:
 # ── PRODUCTOS ───────────────────────────────────────────────────────────
 @app.get("/productos", response_model=List[schemas.ProductoOut])
 async def listar_productos(
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=1000, ge=1, le=5000),
+    skip: int = 0,
+    limit: int = 1000,
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(models.Producto).order_by(models.Producto.nombre).offset(skip).limit(limit)
+    stmt = select(models.Producto).order_by(models.Producto.id.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
     return result.scalars().all()
 

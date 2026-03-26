@@ -6,7 +6,7 @@ let skipMovimientos = 0;
 let limitMovimientos = 200;
 
 async function req(method, path, body){
-  const opts = { method, headers: {'Content-Type':'application/json'} };
+  const opts = { method, headers: {'Content-Type':'application/json'}, cache: 'no-store' };
   if(body) opts.body = JSON.stringify(body);
   const r = await fetch(API + path, opts);
   if(!r.ok){ const e = await r.json().catch(()=>({detail:'Error'})); throw new Error(e.detail||'Error'); }
